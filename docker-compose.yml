@@ -1,0 +1,81 @@
+name: school-admission-system
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-admission}
+      POSTGRES_USER: ${POSTGRES_USER:-admission_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only-change-me}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["--migrate-only"]
+    restart: "no"
+    environment:
+      ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-admission};Username=${POSTGRES_USER:-admission_app};Password=${POSTGRES_PASSWORD:-local-dev-only-change-me};Maximum Pool Size=10;Timeout=15;Command Timeout=30
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-admission};Username=${POSTGRES_USER:-admission_app};Password=${POSTGRES_PASSWORD:-local-dev-only-change-me};Maximum Pool Size=30;Timeout=15;Command Timeout=30
+      HOLD_DURATION_SECONDS: ${HOLD_DURATION_SECONDS:-600}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_started
+
+  # Optional bonus: this is a separate API process/container, not a second port
+  # on the same process. Both APIs coordinate exclusively through PostgreSQL.
+  api-2:
+    profiles: ["bonus"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:8081
+      ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-admission};Username=${POSTGRES_USER:-admission_app};Password=${POSTGRES_PASSWORD:-local-dev-only-change-me};Maximum Pool Size=30;Timeout=15;Command Timeout=30
+      HOLD_DURATION_SECONDS: ${HOLD_DURATION_SECONDS:-600}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+    ports:
+      - "8081:8081"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

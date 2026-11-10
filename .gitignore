@@ -1,0 +1,31 @@
+# Environment / secrets
+.env
+.env.*.local
+!.env.example
+
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# Node
+**/node_modules/
+**/dist/
+**/.vite/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test output
+**/TestResults/
+coverage/
+
+# Logs
+*.log
+
+# Local PostgreSQL
+pgsql/
